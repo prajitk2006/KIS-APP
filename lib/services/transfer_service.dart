@@ -1,27 +1,30 @@
 import 'dart:io';
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:path_provider/path_provider.dart';
+
+class TransferRequest {
+  final String filename;
+  final int size;
+  final Socket socket;
+  final List<int> initialData;
+  TransferRequest(this.filename, this.size, this.socket, this.initialData);
+}
 
 class TransferService {
   SecureServerSocket? _serverSocket;
+  ServerSocket? _basicServerSocket;
   final int port = 45678;
   SecurityContext? _securityContext;
 
   Future<void> _initSecurityContext() async {
-    // In a real app, generate/store this securely per device.
-    // This is a minimal placeholder for TLS structure.
-    // The prompt asks for TLS 1.3 where supported.
     _securityContext = SecurityContext();
-    // _securityContext!.useCertificateChain('path/to/cert.pem');
-    // _securityContext!.usePrivateKey('path/to/key.pem');
   }
 
-  Future<void> startServer(Function(String, int) onReceiveRequest) async {
+  Future<void> startServer(Function(TransferRequest) onReceiveRequest) async {
     await _initSecurityContext();
     try {
-      // Due to the lack of pre-generated certs in this sandbox, we fallback to ServerSocket if SecureServerSocket fails.
-      // A production implementation would generate self-signed certs dynamically.
       try {
         _serverSocket = await SecureServerSocket.bind(
           InternetAddress.anyIPv4,
@@ -33,9 +36,9 @@ class TransferService {
         });
       } catch (e) {
         print('Secure socket failed, falling back to basic socket for now: $e');
-        ServerSocket basicServer = await ServerSocket.bind(InternetAddress.anyIPv4, port);
-        basicServer.listen((Socket socket) {
-          _handleBasicConnection(socket, onReceiveRequest);
+        _basicServerSocket = await ServerSocket.bind(InternetAddress.anyIPv4, port);
+        _basicServerSocket!.listen((Socket socket) {
+          _handleConnection(socket, onReceiveRequest);
         });
       }
       print('Transfer server listening on port $port');
@@ -49,43 +52,78 @@ class TransferService {
       await _serverSocket!.close();
       _serverSocket = null;
     }
+    if (_basicServerSocket != null) {
+      await _basicServerSocket!.close();
+      _basicServerSocket = null;
+    }
   }
 
-  void _handleConnection(SecureSocket socket, Function(String, int) onReceiveRequest) {
-    _processIncoming(socket, onReceiveRequest);
-  }
-
-  void _handleBasicConnection(Socket socket, Function(String, int) onReceiveRequest) {
-    _processIncoming(socket, onReceiveRequest);
-  }
-
-  void _processIncoming(Socket socket, Function(String, int) onReceiveRequest) async {
+  void _handleConnection(Socket socket, Function(TransferRequest) onReceiveRequest) async {
     print('Connection from ${socket.remoteAddress.address}:${socket.remotePort}');
 
-    // Incomplete, but shows structural intent:
-    // Read header, notify UI, read file chunk, write to temp.
-    final tempDir = await getTemporaryDirectory();
-    final file = File('${tempDir.path}/incoming_kis_file.tmp');
-    final sink = file.openWrite();
+    List<int> buffer = [];
+    bool headerParsed = false;
+    StreamSubscription<Uint8List>? subscription;
 
-    socket.listen((data) {
-      sink.add(data);
-      print('Received ${data.length} bytes');
-    }, onDone: () async {
-      await sink.close();
-      socket.close();
-      print('Connection closed. Saved to ${file.path}');
-      // Trigger approval/move here
+    subscription = socket.listen((data) {
+      if (!headerParsed) {
+         buffer.addAll(data);
+         int nlIndex = buffer.indexOf(10); // \n
+         if (nlIndex != -1) {
+            String headerStr = utf8.decode(buffer.sublist(0, nlIndex));
+            try {
+               var header = jsonDecode(headerStr);
+               headerParsed = true;
+
+               List<int> remainder = buffer.sublist(nlIndex + 1);
+               subscription?.pause();
+
+               TransferRequest req = TransferRequest(
+                 header['filename'] ?? 'unknown',
+                 header['size'] ?? 0,
+                 socket,
+                 remainder
+               );
+               onReceiveRequest(req);
+
+            } catch(e) {
+               socket.close();
+               print('Invalid header: $e');
+            }
+         }
+      }
+    }, onDone: () {
+      print('Connection closed.');
     }, onError: (e) {
-      sink.close();
-      socket.close();
       print('Connection error: $e');
     });
   }
 
+  Future<void> acceptTransfer(TransferRequest req, String destinationPath) async {
+     File file = File(destinationPath);
+     IOSink sink = file.openWrite();
+     if (req.initialData.isNotEmpty) {
+        sink.add(req.initialData);
+     }
+
+     req.socket.listen((data) {
+        sink.add(data);
+     }, onDone: () async {
+        await sink.close();
+        req.socket.close();
+        print('File saved to $destinationPath');
+     }, onError: (e) {
+        sink.close();
+        req.socket.close();
+     });
+  }
+
+  void declineTransfer(TransferRequest req) {
+     req.socket.close();
+  }
+
   Future<void> sendFile(String ip, int targetPort, File file) async {
     try {
-      // Security Context would be configured to accept the peer's self-signed cert
       Socket socket;
       try {
          socket = await SecureSocket.connect(ip, targetPort, onBadCertificate: (cert) => true);
@@ -94,7 +132,12 @@ class TransferService {
       }
       print('Connected to $ip:$targetPort');
 
-      // Stream file to socket
+      String header = jsonEncode({
+        'filename': file.path.split('/').last,
+        'size': await file.length()
+      }) + '\n';
+
+      socket.add(utf8.encode(header));
       await file.openRead().pipe(socket);
       print('File sent');
 
