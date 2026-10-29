@@ -54,3 +54,6 @@
 # Web
 /web/flutter_bootstrap.js
 /web/flutter_service_worker.js
+/dist/
+kis-*.tar.gz
+kis-*.zip

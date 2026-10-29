@@ -4,8 +4,7 @@ Keep It Simple (KIS) is a complete, production-quality, native-feeling desktop a
 
 ## Downloads
 
-The downloads are generated automatically when a new release tag is pushed. You can find the latest version of KIS for your operating system here:
+Download the latest version of KIS for your operating system:
 
-- [Linux (kis-linux-x64.tar.gz)](https://github.com/kis-app/kis/releases/latest/download/kis-linux-x64.tar.gz)
-- [Windows (kis-windows-x64.zip)](https://github.com/kis-app/kis/releases/latest/download/kis-windows-x64.zip)
-- [macOS (kis-macos-x64.zip)](https://github.com/kis-app/kis/releases/latest/download/kis-macos-x64.zip)
+- [Linux AppImage/DEB (kis-linux-x64.tar.gz)](./dist/kis-linux-x64.tar.gz)
+- *Note: To generate Windows .exe and macOS .app/.dmg files, you must pull this repository and run `flutter build windows` on a Windows machine, and `flutter build macos` on a Mac machine.*
