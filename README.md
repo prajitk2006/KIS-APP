@@ -4,8 +4,8 @@ Keep It Simple (KIS) is a complete, production-quality, native-feeling desktop a
 
 ## Downloads
 
-Download the latest version of KIS for your operating system:
+The downloads are generated automatically when a new release tag is pushed. You can find the latest version of KIS for your operating system here:
 
-- [Linux AppImage/DEB](https://github.com/kis-app/kis/releases/latest/download/kis-linux.AppImage)
-- [Windows .exe](https://github.com/kis-app/kis/releases/latest/download/kis-windows.exe)
-- [macOS .dmg](https://github.com/kis-app/kis/releases/latest/download/kis-macos.dmg)
+- [Linux (kis-linux-x64.tar.gz)](https://github.com/kis-app/kis/releases/latest/download/kis-linux-x64.tar.gz)
+- [Windows (kis-windows-x64.zip)](https://github.com/kis-app/kis/releases/latest/download/kis-windows-x64.zip)
+- [macOS (kis-macos-x64.zip)](https://github.com/kis-app/kis/releases/latest/download/kis-macos-x64.zip)
